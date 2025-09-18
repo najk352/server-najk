@@ -1,13 +1,9 @@
+// C:\Users\Pharmacy\Desktop\jobportal-mern\server\routes\contactRoutes.js
 const express = require('express');
-const { submitContactMessage, getContactMessages, updateContactMessageReadStatus } = require('../controllers/contactController');
-const { protect, authorizeAdmin } = require('../middleware/authMiddleware'); // For admin routes
+const { submitContactMessage } = require('../controllers/contactController'); // Only the public function
 const router = express.Router();
 
-// Public route for submitting messages
+// Public route for submitting messages (no authentication needed for this)
 router.post('/', submitContactMessage);
-
-// Admin routes for managing messages
-router.get('/admin/contact-messages', protect, authorizeAdmin, getContactMessages);
-router.put('/admin/contact-messages/:id/read', protect, authorizeAdmin, updateContactMessageReadStatus);
 
 module.exports = router;

@@ -1,26 +1,12 @@
+// C:\Users\Pharmacy\Desktop\jobportal-mern\server\middleware\uploadMiddleware.js
 const multer = require('multer');
 const path = require('path');
-const { uploadFileToBlob } = require('../config/azureBlobStorage'); // Import blob utility
-const fs = require('fs');
-// Multer disk storage - used to temporarily store file before uploading to blob
-// For large files, consider Multer's memoryStorage if you can handle buffers,
-// but diskStorage is safer for larger uploads to prevent OOM errors.
-const tempStorage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        // Use a temporary local directory for Multer
-        const tempUploadsDir = path.join(__dirname, '../temp_uploads');
-        if (!fs.existsSync(tempUploadsDir)) { // Ensure temp directory exists
-            fs.mkdirSync(tempUploadsDir);
-        }
-        cb(null, tempUploadsDir);
-    },
-    filename: function (req, file, cb) {
-        cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
-    }
-});
+const cloudinary = require('../config/cloudinary'); // Import Cloudinary config
 
+// Multer memory storage is often preferred for Cloudinary as it works with buffers
+const storage = multer.memoryStorage();
 
-// Multer file filter (remains the same)
+// Multer file filter (allows images and documents)
 const fileFilter = (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -34,46 +20,45 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-    storage: tempStorage, // Use temporary disk storage
+    storage: storage, // Use memory storage
     limits: { fileSize: 1024 * 1024 * 10 }, // 10MB file size limit
     fileFilter: fileFilter
 });
 
-// Custom middleware to upload from Multer's temporary storage to Azure Blob
-const uploadToAzureBlob = (req, res, next) => {
+// Custom middleware to upload from Multer's buffer to Cloudinary
+const uploadToCloudinary = (req, res, next) => {
+    // If no file was uploaded by multer, skip to next middleware
     if (!req.file && (!req.files || req.files.length === 0)) {
-        return next(); // No file to upload
+        return next();
     }
 
-    const filesToProcess = req.file ? [req.file] : req.files.flatMap(f => f); // Handle single/multiple files
+    // Determine if it's a single file (req.file) or multiple (req.files)
+    const filesToProcess = req.file ? [req.file] : req.files.flatMap(f => f);
 
     Promise.all(filesToProcess.map(async (file) => {
         try {
-            // Read the file from temporary disk storage
-            const buffer = fs.readFileSync(file.path);
-            const blobUrl = await uploadFileToBlob(
-                file.path, // Temporary path
-                file.filename, // Name to use in blob storage
-                buffer,
-                file.mimetype
+            // Cloudinary upload expects a base64 string or buffer
+            const result = await cloudinary.uploader.upload(
+                `data:${file.mimetype};base64,${file.buffer.toString('base64')}`, // Convert buffer to base64
+                {
+                    folder: "najah_jobportal", // Optional: Cloudinary folder
+                    resource_type: "auto",     // Automatically detect type
+                    public_id: `${file.fieldname}-${Date.now()}` // Unique public ID
+                }
             );
-            file.azureBlobUrl = blobUrl; // Attach blob URL to file object
-
-            // Clean up local temporary file
-            fs.unlinkSync(file.path);
+            file.cloudinaryUrl = result.secure_url; // Attach Cloudinary URL to the file object
         } catch (error) {
-            console.error(`Error uploading ${file.filename} to Azure Blob:`, error);
-            throw new Error(`Failed to upload ${file.originalname} to Azure Blob`);
+            console.error(`Error uploading ${file.originalname} to Cloudinary:`, error);
+            throw new Error(`Failed to upload ${file.originalname} to Cloudinary`);
         }
     }))
-    .then(() => next())
+    .then(() => next()) // All files uploaded, proceed
     .catch(error => {
-        res.status(500).send(error.message);
+        res.status(500).send(error.message); // Send error if any upload fails
     });
 };
 
-
 module.exports = {
     upload, // Multer instance
-    uploadToAzureBlob // Custom middleware for blob upload
+    uploadToCloudinary // Custom middleware for Cloudinary upload
 };

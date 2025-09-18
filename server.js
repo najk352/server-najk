@@ -25,7 +25,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Serve uploaded files (documents, photos)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+//app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes (ALL ROUTES MUST BE DEFINED *AFTER* const app = express();)
 app.use('/api/auth', require('./routes/authRoutes'));
